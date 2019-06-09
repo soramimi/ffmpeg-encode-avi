@@ -48,7 +48,7 @@ extern "C" {
 static int audio_is_eof, video_is_eof;
 #define STREAM_DURATION   5.0
 #define STREAM_FRAME_RATE 29.97
-#define STREAM_PIX_FMT    AV_PIX_FMT_YUV420P /* default pix_fmt */
+#define STREAM_PIX_FMT    AV_PIX_FMT_RGB24
 static int sws_flags = SWS_BICUBIC;
 
 static int write_frame(AVFormatContext *fmt_ctx, const AVRational *time_base, AVStream *st, AVPacket *pkt)
@@ -98,7 +98,7 @@ static AVStream *add_stream(AVFormatContext *oc, AVCodec **codec, enum AVCodecID
 		c->time_base.den = STREAM_FRAME_RATE * 100;
 		c->time_base.num = 100;
 		c->gop_size      = 12; /* emit one intra frame every twelve frames at most */
-		c->pix_fmt       = STREAM_PIX_FMT;
+		c->pix_fmt       = AV_PIX_FMT_YUV420P;//STREAM_PIX_FMT;
 		if (c->codec_id == AV_CODEC_ID_MPEG2VIDEO) {
 			/* just for testing, we also add B frames */
 			c->max_b_frames = 2;
@@ -312,38 +312,39 @@ static void open_video(AVFormatContext *oc, AVCodec *codec, AVStream *st)
 //		fprintf(stderr, "Could not allocate picture: %s\n", av_err2str(ret));
 		exit(1);
 	}
-	/* If the output format is not YUV420P, then a temporary YUV420P
-	 * picture is needed too. It is then converted to the required
-	 * output format. */
-	if (c->pix_fmt != AV_PIX_FMT_YUV420P) {
-		ret = avpicture_alloc(&src_picture, AV_PIX_FMT_YUV420P, c->width, c->height);
-		if (ret < 0) {
-//			fprintf(stderr, "Could not allocate temporary picture: %s\n", av_err2str(ret));
-			exit(1);
-		}
+	ret = avpicture_alloc(&src_picture, AV_PIX_FMT_RGB24, c->width, c->height);
+	if (ret < 0) {
+//		fprintf(stderr, "Could not allocate temporary picture: %s\n", av_err2str(ret));
+		exit(1);
 	}
 	/* copy data and linesize picture pointers to frame */
 	*((AVPicture *)frame) = dst_picture;
 }
 /* Prepare a dummy image. */
-static void fill_yuv_image(AVPicture *pict, int frame_index,
-						   int width, int height)
+static void fill_rgb_image(AVPicture *pict, int frame_index, int width, int height)
 {
 	int x, y, i;
 	i = frame_index;
 	/* Y */
 	for (y = 0; y < height; y++) {
+		uint8_t *p = &pict->data[0][y * pict->linesize[0]];
 		for (x = 0; x < width; x++) {
-			pict->data[0][y * pict->linesize[0] + x] = x + y + i * 3;
+			int r = x * 255 / width;
+			int g = y * 255 / height;
+			int b = (((x + i) ^ (y + i)) & 64) ? 0 : 255;
+			p[0] = r;
+			p[1] = g;
+			p[2] = b;
+			p += 3;
 		}
 	}
 	/* Cb and Cr */
-	for (y = 0; y < height / 2; y++) {
-		for (x = 0; x < width / 2; x++) {
-			pict->data[1][y * pict->linesize[1] + x] = 128 + y + i * 2;
-			pict->data[2][y * pict->linesize[2] + x] = 64 + x + i * 5;
-		}
-	}
+//	for (y = 0; y < height / 2; y++) {
+//		for (x = 0; x < width / 2; x++) {
+//			pict->data[1][y * pict->linesize[1] + x] = 128 + y + i * 2;
+//			pict->data[2][y * pict->linesize[2] + x] = 64 + x + i * 5;
+//		}
+//	}
 }
 static void write_video_frame(AVFormatContext *oc, AVStream *st, int flush)
 {
@@ -351,21 +352,17 @@ static void write_video_frame(AVFormatContext *oc, AVStream *st, int flush)
 	static struct SwsContext *sws_ctx;
 	AVCodecContext *c = st->codec;
 	if (!flush) {
-		if (c->pix_fmt != AV_PIX_FMT_YUV420P) {
-			/* as we only generate a YUV420P picture, we must convert it
-			 * to the codec pixel format if needed */
+		/* as we only generate a YUV420P picture, we must convert it
+		 * to the codec pixel format if needed */
+		if (!sws_ctx) {
+			sws_ctx = sws_getContext(c->width, c->height, AV_PIX_FMT_RGB24, c->width, c->height, c->pix_fmt, sws_flags, nullptr, nullptr, nullptr);
 			if (!sws_ctx) {
-				sws_ctx = sws_getContext(c->width, c->height, AV_PIX_FMT_YUV420P, c->width, c->height, c->pix_fmt, sws_flags, nullptr, nullptr, nullptr);
-				if (!sws_ctx) {
-					fprintf(stderr, "Could not initialize the conversion context\n");
-					exit(1);
-				}
+				fprintf(stderr, "Could not initialize the conversion context\n");
+				exit(1);
 			}
-			fill_yuv_image(&src_picture, frame_count, c->width, c->height);
-			sws_scale(sws_ctx, (const uint8_t * const *)src_picture.data, src_picture.linesize, 0, c->height, dst_picture.data, dst_picture.linesize);
-		} else {
-			fill_yuv_image(&dst_picture, frame_count, c->width, c->height);
 		}
+		fill_rgb_image(&src_picture, frame_count, c->width, c->height);
+		sws_scale(sws_ctx, (const uint8_t * const *)src_picture.data, src_picture.linesize, 0, c->height, dst_picture.data, dst_picture.linesize);
 	}
 	if (oc->oformat->flags & AVFMT_RAWPICTURE && !flush) {
 		/* Raw video case - directly store the picture in the packet */
