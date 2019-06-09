@@ -1,0 +1,5 @@
+*.user
+ffmpeg-encode-avi
+*.o
+*.avi
+ffmpeg-encode-avi
