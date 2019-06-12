@@ -114,9 +114,9 @@ static AVStream *add_stream(AVFormatContext *oc, AVCodec **codec, enum AVCodecID
 		break;
 	}
 	/* Some formats want stream headers to be separate. */
-	if (oc->oformat->flags & AVFMT_GLOBALHEADER) {
-		c->flags |= CODEC_FLAG_GLOBAL_HEADER;
-	}
+//	if (oc->oformat->flags & AVFMT_GLOBALHEADER) {
+//		c->flags |= CODEC_FLAG_GLOBAL_HEADER;
+//	}
 	return st;
 }
 /**************************************************************/
@@ -159,7 +159,7 @@ static void open_audio(AVFormatContext *oc, AVCodec *codec, AVStream *st)
 	tincr = 2 * M_PI * 110.0 / c->sample_rate;
 	/* increment frequency by 110 Hz per second */
 	tincr2 = 2 * M_PI * 110.0 / c->sample_rate / c->sample_rate;
-	src_nb_samples = (c->codec->capabilities & CODEC_CAP_VARIABLE_FRAME_SIZE) ? 1000 : c->frame_size;
+	src_nb_samples = c->frame_size;
 	ret = av_samples_alloc_array_and_samples(&src_samples_data, &src_samples_linesize, c->channels, src_nb_samples, AV_SAMPLE_FMT_S16, 0);
 	if (ret < 0) {
 		fprintf(stderr, "Could not allocate source samples\n");
@@ -246,7 +246,8 @@ static void write_audio_frame(AVFormatContext *oc, AVStream *st, int flush)
 			dst_nb_samples = src_nb_samples;
 		}
 		audio_frame->nb_samples = dst_nb_samples;
-		audio_frame->pts = av_rescale_q(samples_count, (AVRational){1, c->sample_rate}, c->time_base);
+		AVRational rate = {1, c->sample_rate};
+		audio_frame->pts = av_rescale_q(samples_count, rate, c->time_base);
 		avcodec_fill_audio_frame(audio_frame, c->channels, c->sample_fmt, dst_samples_data[0], dst_samples_size, 0);
 		samples_count += dst_nb_samples;
 	}
@@ -364,16 +365,17 @@ static void write_video_frame(AVFormatContext *oc, AVStream *st, int flush)
 		fill_rgb_image(&src_picture, frame_count, c->width, c->height);
 		sws_scale(sws_ctx, (const uint8_t * const *)src_picture.data, src_picture.linesize, 0, c->height, dst_picture.data, dst_picture.linesize);
 	}
-	if (oc->oformat->flags & AVFMT_RAWPICTURE && !flush) {
-		/* Raw video case - directly store the picture in the packet */
-		AVPacket pkt;
-		av_init_packet(&pkt);
-		pkt.flags        |= AV_PKT_FLAG_KEY;
-		pkt.stream_index  = st->index;
-		pkt.data          = dst_picture.data[0];
-		pkt.size          = sizeof(AVPicture);
-		ret = av_interleaved_write_frame(oc, &pkt);
-	} else {
+//	if (oc->oformat->flags & AVFMT_RAWPICTURE && !flush) {
+//		/* Raw video case - directly store the picture in the packet */
+//		AVPacket pkt;
+//		av_init_packet(&pkt);
+//		pkt.flags        |= AV_PKT_FLAG_KEY;
+//		pkt.stream_index  = st->index;
+//		pkt.data          = dst_picture.data[0];
+//		pkt.size          = sizeof(AVPicture);
+//		ret = av_interleaved_write_frame(oc, &pkt);
+//	} else
+	{
 		AVPacket pkt = {};
 		int got_packet;
 		av_init_packet(&pkt);

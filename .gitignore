@@ -3,3 +3,6 @@ ffmpeg-encode-avi
 *.o
 *.avi
 ffmpeg-encode-avi
+_bin/
+*.ilk
+*.pdb
