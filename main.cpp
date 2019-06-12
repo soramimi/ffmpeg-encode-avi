@@ -447,8 +447,14 @@ int main()
 	if (fmt->audio_codec != AV_CODEC_ID_NONE) audio_st = add_stream(oc, &audio_codec, fmt->audio_codec);
 	/* Now that all the parameters are set, we can open the audio and
 	 * video codecs and allocate the necessary encode buffers. */
-	if (video_st) open_video(oc, video_codec, video_st);
-	if (audio_st) open_audio(oc, audio_codec, audio_st);
+	if (video_st) {
+		open_video(oc, video_codec, video_st);
+		video_st->time_base.den = 100 * STREAM_FRAME_RATE;
+		video_st->time_base.num = 100;
+	}
+	if (audio_st) {
+		open_audio(oc, audio_codec, audio_st);
+	}
 	av_dump_format(oc, 0, filename, 1);
 	/* open the output file, if needed */
 	if (!(fmt->flags & AVFMT_NOFILE)) {
